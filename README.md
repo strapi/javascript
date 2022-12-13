@@ -92,17 +92,23 @@ function bar() {}
 
 ```js
 /*
- * Good: module.exports is at the top of the file
- * Bad: Using function declaration + relying on hoisting
+ * Good: 
+ *   - Using function expressions
+ *   - Easy to call each function from the others
+ *   - 
+ * Bad: 
+ *   - Hard to differentiate between private and public methods 
+ *   - Less readable
+ *   - Can be bound but won't be clear what this is
  */
+
+const foo = function foo() {}
+const bar = function bar() {} 
 
 module.exports = {
 	foo,
 	bar
 };
-
-function foo() {}
-function bar() {}
 ```
 
 **Option 3**:
@@ -136,23 +142,26 @@ module.exports = {
 ```js
 /*
  * Good: 
+ *   - Basically the same as option 4 but can use `interface` to reference other function instead of this
  *   - Object pattern with internal state (can use this)
  *   - Method shortand is nice to read
  *   - Easy to differentiate private / public methods
  * Bad: 
  *   - Methods can be bound incorrectly if dereferenced (invalid this / or no this)
- *   - Can feel a bee too spaghetti
+ *   - Uses either this or module is not really good
  *   - Allows composition 🔥 with this bindings
  */
 
 const privateMethod = () => {};
 
-module.exports = {
-	foo() {
-    this.bar();
+const module = {
+  foo() {
+    module.bar() 
   },
-	bar() {}
-};
+  bar() {}
+}
+
+module.exports = module;
 ```
 
 **Option 5**:
@@ -187,26 +196,24 @@ module.exports = module;
 ```js
 /*
  * Good: 
- *   - Basically the same as option 4 but can use `interface` to reference other function instead of this
- *   - Object pattern with internal state (can use this)
- *   - Method shortand is nice to read
- *   - Easy to differentiate private / public methods
+ *   - Easy to diff what is internal vs external (private vs public)
  * Bad: 
- *   - Methods can be bound incorrectly if dereferenced (invalid this / or no this)
- *   - Uses either this or module is not really good
- *   - Allows composition 🔥 with this bindings
+ *   - No central place to know the complete interface of the module (vs a single module.exports)
+ *   - Verbose
  */
 
 const privateMethod = () => {};
 
-const module = {
-  foo() {
-    module.bar() 
-  },
-  bar() {}
-}
+exports.publicMethod = () => { privateMethod() };
+exports.otherPubMethod = () =>  { exports.publicMethod() };
 
-module.exports = module;
+// or similar
+const internals = {};
+
+internals.privateMethod = () => {};
+
+exports.publicMethod = () => { internals.privateMethod() };
+exports.otherPubMethod = () =>  { exports.publicMethod() };
 ```
 
 - Option 1 & 2 can be ruled out right now.
@@ -310,93 +317,83 @@ Controller.create();
 **Option 4**:
 
 ```js
-class Controller {
-  constructor(options) {
-    this.x = options.x;
-  }
- 
-  // when available
-  #privateMethod() {}
+function SomeClass(options) {
+  this.x = options.x;
 
+	this.publicMethodThatNeedsPrivateOptions = () => {
+    console.log(option.privateKey);
+  }
+}
+
+const privateMethod = () => {};
+
+SomeClass.prototype = {
   publicMethod() {
-    this.#privateMethod();
+    privateMethod();
   }
 
   otherPubMethod() {
     this.publicMethod();
   }
-
-  // use this to instantiate
-  static create(opts) {
-	  return new Controller(opts);
-  }
 }
 
-module.exports = Controller;
-
-//
-const Controller = require('controller');
-
-Controller.create();
+module.exports = (options) => new SomeClass(options);
 ```
 
 **Option 5**:
 
 ```js
-class Controller {
-  constructor(options) {
-    this.x = options.x;
-  }
- 
-  // when available
-  #privateMethod() {}
+const privateMethod = () => {};
 
-  publicMethod() {
-    this.#privateMethod();
+const prototype = {
+  init(options) {
+		this.x = options.x;
+
+		this.publicMethodThatNeedsPrivateOptions = () => {
+      console.log(option.privateKey);
+    }
+  },
+
+	publicMethod() {
+    privateMethod();
   }
 
   otherPubMethod() {
     this.publicMethod();
   }
-
-  // use this to instantiate
-  static create(opts) {
-	  return new Controller(opts);
-  }
 }
 
-module.exports = Controller;
-
-//
-const Controller = require('controller');
-
-Controller.create();
+module.exports = (options) => {
+  const instance = Object.create(prototype);
+  return instance.init(options)
+}
 ```
 
 **Option 6**:
 
 ```js
-class Controller {
-  constructor(options) {
-    this.x = options.x;
-  }
- 
-  // when available
-  #privateMethod() {}
+const privateMethod = () => {};
 
-  publicMethod() {
-    this.#privateMethod();
+const prototype = {
+	publicMethod() {
+    privateMethod();
   }
 
   otherPubMethod() {
     this.publicMethod();
   }
-
-  // use this to instantiate
-  static create(opts) {
-    return new Controller(opts);
-  }
 }
+
+module.exports = (options) => {
+  const instance = Object.create(prototype);
+  
+   instance.x = options.x;
+	 instance.publicMethodThatNeedsPrivateOptions = () => {
+      console.log(option.privateKey);
+   };
+
+   return instance;
+};
 ```
 
 **Option 7**:
